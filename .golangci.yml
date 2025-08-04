@@ -1,0 +1,370 @@
+run:
+  timeout: 5m
+  issues-exit-code: 1
+  tests: true
+  go: "1.24"
+
+output:
+  formats:
+    - format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+  sort-results: true
+
+linters-settings:
+  # Security-focused linter settings
+  gosec:
+    severity: "low"
+    confidence: "low"
+    excludes:
+      - G104 # Audit errors not checked - we'll handle this selectively
+    config:
+      G306: "0644" # File permissions
+      G301: "0750" # Directory permissions
+  
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+      - performance
+      - experimental
+      - opinionated
+    disabled-checks:
+      - whyNoLint
+      - unnamedResult
+    settings:
+      captLocal:
+        paramsOnly: true
+      elseif:
+        skipBalanced: true
+      hugeParam:
+        sizeThreshold: 80
+      rangeExprCopy:
+        sizeThreshold: 512
+      rangeValCopy:
+        sizeThreshold: 128
+      tooManyResultsChecker:
+        maxResults: 5
+      truncateCmp:
+        skipArchDependent: true
+      underef:
+        skipRecvDeref: true
+
+  cyclop:
+    max-complexity: 15
+    package-average: 10.0
+    skip-tests: false
+
+  dupl:
+    threshold: 100
+
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+    exclude-functions:
+      - io/ioutil.ReadFile
+      - io.Copy(*bytes.Buffer)
+      - io.Copy(os.Stdout)
+
+  errorlint:
+    errorf: true
+    asserts: true
+    comparison: true
+
+  exhaustive:
+    check-generated: false
+    default-signifies-exhaustive: false
+
+  funlen:
+    lines: 100
+    statements: 50
+
+  gocognit:
+    min-complexity: 15
+
+  goconst:
+    min-len: 2
+    min-occurrences: 2
+
+  gocyclo:
+    min-complexity: 15
+
+  godot:
+    scope: declarations
+    exclude:
+      - "^fixme:"
+      - "^todo:"
+    period: true
+    capital: false
+
+  goimports:
+    local-prefixes: github.com/hbttundar/scg-service-bus
+
+  mnd:
+    settings:
+      mnd:
+        checks: argument,case,condition,operation,return,assign
+        ignored-numbers: 0,1,2,3
+        ignored-functions: strings.SplitN
+
+  gomodguard:
+    allowed:
+      modules: []
+      domains: []
+    blocked:
+      modules:
+        - github.com/uudashr/go-module:
+            recommendations:
+              - golang.org/x/mod
+            reason: "`mod` is the official go.mod parser library."
+
+  gosimple:
+    checks: ["all"]
+
+  govet:
+    enable:
+      - shadow
+    settings:
+      printf:
+        funcs:
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Infof
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Warnf
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Errorf
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Fatalf
+
+  ineffassign:
+    check-exported: false
+
+  lll:
+    line-length: 120
+
+  misspell:
+    locale: US
+
+  nakedret:
+    max-func-lines: 30
+
+  nestif:
+    min-complexity: 4
+
+  nolintlint:
+    allow-leading-space: true
+    allow-unused: false
+    require-explanation: false
+    require-specific: false
+
+  prealloc:
+    simple: true
+    range-loops: true
+    for-loops: false
+
+  predeclared:
+    ignore: ""
+    q: false
+
+  revive:
+    min-confidence: 0
+    rules:
+      - name: atomic
+      - name: line-length-limit
+        arguments: [120]
+      - name: argument-limit
+        arguments: [4]
+      - name: cyclomatic
+        arguments: [15]
+      - name: max-public-structs
+        arguments: [3]
+      - name: file-header
+        disabled: true
+
+  staticcheck:
+    checks: ["all"]
+
+  stylecheck:
+    checks: ["all", "-ST1000", "-ST1003", "-ST1016", "-ST1020", "-ST1021", "-ST1022"]
+    dot-import-whitelist:
+      - fmt
+    initialisms: ["ACL", "API", "ASCII", "CPU", "CSS", "DNS", "EOF", "GUID", "HTML", "HTTP", "HTTPS", "ID", "IP", "JSON", "QPS", "RAM", "RPC", "SLA", "SMTP", "SQL", "SSH", "TCP", "TLS", "TTL", "UDP", "UI", "GID", "UID", "UUID", "URI", "URL", "UTF8", "VM", "XML", "XMPP", "XSRF", "XSS"]
+    http-status-code-whitelist: ["200", "400", "404", "500"]
+
+  tagliatelle:
+    case:
+      rules:
+        json: camel
+        yaml: camel
+        xml: camel
+        bson: camel
+        avro: snake
+        mapstructure: kebab
+
+  tenv:
+    all: false
+
+  testpackage:
+    skip-regexp: (export|internal)_test\.go
+
+  thelper:
+    test:
+      first: true
+      name: true
+      begin: true
+    benchmark:
+      first: true
+      name: true
+      begin: true
+
+  unparam:
+    check-exported: false
+
+  unused:
+    go: "1.24"
+
+  whitespace:
+    multi-if: false
+    multi-func: false
+
+  wrapcheck:
+    ignoreSigs:
+      - .Errorf(
+      - errors.New(
+      - errors.Unwrap(
+      - .Wrap(
+      - .Wrapf(
+
+linters:
+  disable-all: true
+  enable:
+    # Security and vulnerability detection
+    - gosec          # Security issues
+    - gocritic       # Code quality and potential bugs
+    - errcheck       # Unchecked errors
+    - errorlint      # Error handling best practices
+    
+    # Code quality and maintainability
+    - gofmt          # Code formatting
+    - govet          # Go vet analysis (includes shadow checking)
+    - ineffassign    # Ineffectual assignments
+    - staticcheck    # Static analysis
+    - unused         # Unused code (replaces deadcode, varcheck, structcheck)
+    - typecheck      # Type checking
+    
+    # Style and best practices
+    - stylecheck     # Style guide enforcement
+    - revive         # Replacement for golint
+    - gosimple       # Simplify code
+    - unconvert      # Unnecessary type conversions
+    - misspell       # Spelling mistakes
+    - nolintlint     # Nolint directive usage
+    
+    # Complexity and maintainability
+    - cyclop         # Cyclomatic complexity
+    - gocognit       # Cognitive complexity
+    - gocyclo        # Cyclomatic complexity
+    - funlen         # Function length
+    - nestif         # Nested if statements
+    - nakedret       # Naked returns
+    
+    # Performance
+    - prealloc       # Slice preallocation
+    - bodyclose      # HTTP response body closing
+    
+    # Bugs and potential issues
+    - rowserrcheck   # SQL rows.Err check
+    - sqlclosecheck  # SQL Close() check
+    - nilerr         # Nil error return
+    - nilnil         # Nil nil return
+    - makezero       # Make slice with zero length
+    - durationcheck  # Duration multiplication
+    - noctx          # HTTP request without context
+    
+    # Code duplication
+    - dupl           # Code duplication
+    
+    # Constants and magic numbers
+    - goconst        # Repeated strings that could be constants
+    - mnd            # Magic numbers
+    
+    # Import organization
+    - gci            # Import order
+    
+    # Documentation
+    - godot          # Comments should end with period
+    
+    # Testing
+    - usetesting     # os.Setenv instead of t.Setenv (replaces tenv)
+    - thelper        # Test helpers
+    - testpackage    # Separate test packages
+    
+    # Whitespace and formatting
+    - whitespace     # Whitespace issues
+    - wsl            # Whitespace linter
+    
+    # Line length
+    - lll            # Line length limit
+
+issues:
+  exclude-dirs:
+    - vendor
+    - examples
+  exclude-files:
+    - ".*\\.pb\\.go$"
+    - ".*_gen\\.go$"
+    - "examples/.*"
+  uniq-by-line: true
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - mnd
+        - funlen
+        - goconst
+        - gocognit
+        - errcheck
+        - dupl
+        - gosec
+    
+    # Exclude some gosec messages
+    - linters:
+        - gosec
+      text: "G404: Use of weak random number generator"
+    
+    # Exclude lll issues for long lines with go:generate
+    - linters:
+        - lll
+      source: "^//go:generate "
+    
+    # Exclude shadow checking on err variables
+    - linters:
+        - govet
+      text: 'shadow: declaration of "(err|ctx)" shadows declaration at'
+    
+    # Exclude some staticcheck messages
+    - linters:
+        - staticcheck
+      text: "SA9003:"
+    
+    # Exclude some revive rules for test files
+    - path: _test\.go
+      linters:
+        - revive
+      text: "max-public-structs"
+
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  new: false
+  fix: false
+
+severity:
+  default-severity: error
+  case-sensitive: false
+  rules:
+    - linters:
+        - gosec
+      severity: error
+    - linters:
+        - errcheck
+      severity: error
+    - linters:
+        - gocritic
+      severity: warning

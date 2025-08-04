@@ -1,0 +1,273 @@
+#!/bin/bash
+set -e
+
+# SCG Support Tool
+
+# Variables
+GO_VERSION="1.24.5"
+
+# Tools
+GOLANGCI_LINT="golangci-lint"
+GOVULNCHECK="govulncheck"
+GOSEC="gosec"
+GOIMPORTS="goimports"
+
+# Function to show help message
+show_help() {
+  echo "SCG Support Tool"
+  echo "Available commands:"
+  echo "  build        - Build the code"
+  echo "  test [pkg]   - Run tests with race detection and coverage (optionally for specific package)"
+  echo "  bench [pkg]  - Run benchmarks (optionally for specific package)"
+  echo "  lint         - Run linter on the codebase"
+  echo "  lint-fix     - Run linter and fix issues automatically when possible"
+  echo "  format       - Format Go files using gofmt and goimports"
+  echo "  security     - Run security checks (govulncheck and gosec)"
+  echo "  clean        - Clean build cache and test cache"
+  echo "  deps         - Download and tidy dependencies"
+  echo "  coverage     - Generate and view coverage report"
+  echo "  docs         - Generate documentation"
+  echo "  ci           - Run all CI checks (build, test, lint, security)"
+  echo "  install-tools - Install required tools"
+  echo "  help         - Show this help message"
+}
+
+# Function to build the code
+build_code() {
+  echo "Building code..."
+  go build -v ./...
+  echo "Build successful!"
+}
+
+# Function to run tests
+run_tests() {
+  local target="${1:-./...}"
+  echo "Running tests for $target..."
+  go test -race -v -parallel 4 -coverprofile=coverage.txt -covermode=atomic "$target"
+  echo "Tests passed!"
+}
+
+# Function to run benchmarks
+run_benchmarks() {
+  local target="${1:-./...}"
+  echo "Running benchmarks for $target..."
+  go test -bench=. -benchmem "$target"
+  echo "Benchmarks completed!"
+}
+
+# Function to install required tools
+install_tools() {
+  echo "Installing required tools..."
+
+  # Install golangci-lint if not already installed
+  if ! command -v ${GOLANGCI_LINT} &> /dev/null; then
+    echo "Installing golangci-lint..."
+    go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+  fi
+
+  # Install govulncheck if not already installed
+  if ! command -v ${GOVULNCHECK} &> /dev/null; then
+    echo "Installing govulncheck..."
+    go install golang.org/x/vuln/cmd/govulncheck@latest
+  fi
+
+  # Install gosec if not already installed
+  if ! command -v ${GOSEC} &> /dev/null; then
+    echo "Installing gosec..."
+    go install github.com/securego/gosec/v2/cmd/gosec@latest
+  fi
+
+  # Install goimports if not already installed
+  if ! command -v ${GOIMPORTS} &> /dev/null; then
+    echo "Installing goimports..."
+    go install golang.org/x/tools/cmd/goimports@latest
+  fi
+
+  echo "Done."
+}
+
+# Function to run the linter
+run_lint() {
+  echo "Running linter..."
+  if ! command -v ${GOLANGCI_LINT} &> /dev/null; then
+    echo "${GOLANGCI_LINT} not found, installing..."
+    go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+  fi
+  ${GOLANGCI_LINT} run --timeout=5m --concurrency=4
+  echo "Linting passed!"
+}
+
+# Function to run the linter and fix issues
+run_lint_fix() {
+  echo "Running linter and fixing issues..."
+  if ! command -v ${GOLANGCI_LINT} &> /dev/null; then
+    echo "${GOLANGCI_LINT} not found, installing..."
+    go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+  fi
+  ${GOLANGCI_LINT} run --fix --timeout=5m --concurrency=4
+  echo "Linting and fixing completed!"
+}
+
+# Function to format Go files
+run_format() {
+  # Install goimports if not already installed
+  if ! command -v ${GOIMPORTS} &> /dev/null; then
+    echo "${GOIMPORTS} not found, installing..."
+    go install golang.org/x/tools/cmd/goimports@latest
+  fi
+
+  if [ -z "$1" ]; then
+    echo "Formatting all Go files..."
+    find . -name "*.go" -not -path "./vendor/*" -exec gofmt -w {} \;
+    find . -name "*.go" -not -path "./vendor/*" -exec ${GOIMPORTS} -w {} \;
+    echo "All Go files formatted successfully!"
+  else
+    echo "Formatting $1..."
+    if [[ "$1" == *.go ]]; then
+      gofmt -w "$1"
+      ${GOIMPORTS} -w "$1"
+      echo "$1 formatted successfully!"
+    else
+      echo "Error: $1 is not a Go file."
+      exit 1
+    fi
+  fi
+}
+
+# Function to clean build and test cache
+run_clean() {
+  echo "Cleaning build and test cache..."
+  go clean -cache -testcache -modcache
+  echo "Cache cleaned successfully!"
+}
+
+# Function to manage dependencies
+run_deps() {
+  echo "Downloading and tidying dependencies..."
+  go mod download
+  go mod tidy
+  echo "Dependencies updated successfully!"
+}
+
+# Function to generate and view coverage report
+run_coverage() {
+  echo "Generating coverage report..."
+  go test -coverprofile=coverage.out ./...
+  go tool cover -html=coverage.out -o coverage.html
+  echo "Coverage report generated: coverage.html"
+  if command -v xdg-open &> /dev/null; then
+    xdg-open coverage.html
+  elif command -v open &> /dev/null; then
+    open coverage.html
+  else
+    echo "Please open coverage.html in your browser to view the report"
+  fi
+}
+
+# Function to generate documentation
+run_docs() {
+  echo "Generating documentation..."
+  go doc -all ./... > docs.txt
+  echo "Documentation generated: docs.txt"
+  if command -v godoc &> /dev/null; then
+    echo "Starting godoc server on http://localhost:6060"
+    echo "Press Ctrl+C to stop the server"
+    godoc -http=:6060
+  else
+    echo "Install godoc with: go install golang.org/x/tools/cmd/godoc@latest"
+    echo "Then run: godoc -http=:6060"
+  fi
+}
+
+# Function to run security checks
+run_security() {
+  echo "Running security checks..."
+  # Install security tools if not already installed
+  if ! command -v ${GOVULNCHECK} &> /dev/null; then
+    echo "${GOVULNCHECK} not found, installing..."
+    go install golang.org/x/vuln/cmd/govulncheck@latest
+  fi
+  if ! command -v ${GOSEC} &> /dev/null; then
+    echo "${GOSEC} not found, installing..."
+    go install github.com/securego/gosec/v2/cmd/gosec@latest
+  fi
+  # Run security tools
+  echo "Running govulncheck..."
+  ${GOVULNCHECK} ./...
+  echo "Running gosec..."
+  ${GOSEC} -quiet -exclude-dir=.git -exclude-dir=.github ./...
+  echo "Security checks passed!"
+}
+
+# Function to run all CI checks
+run_ci() {
+  echo "Running CI checks locally..."
+
+  # Check Go version
+  echo "Using Go version: ${GO_VERSION}"
+  INSTALLED_GO_VERSION=$(go version | awk '{print $3}' | sed 's/go//')
+  if [[ "$INSTALLED_GO_VERSION" != "$GO_VERSION" ]]; then
+    echo "Warning: Using Go version $INSTALLED_GO_VERSION instead of $GO_VERSION"
+  fi
+
+  # Run all CI steps
+  build_code
+  run_tests
+  run_lint
+  run_security
+
+  echo "All CI checks passed successfully!"
+}
+
+# Main execution
+case "$1" in
+  "build")
+    build_code
+    ;;
+  "test")
+    run_tests "$2"
+    ;;
+  "bench")
+    run_benchmarks "$2"
+    ;;
+  "lint")
+    run_lint
+    ;;
+  "lint-fix")
+    run_lint_fix
+    ;;
+  "format")
+    run_format "$2"
+    ;;
+  "security")
+    run_security
+    ;;
+  "clean")
+    run_clean
+    ;;
+  "deps")
+    run_deps
+    ;;
+  "coverage")
+    run_coverage
+    ;;
+  "docs")
+    run_docs
+    ;;
+  "ci")
+    run_ci
+    ;;
+  "install-tools")
+    install_tools
+    ;;
+  "help" | "")
+    show_help
+    ;;
+  *)
+    echo "Unknown command: $1"
+    show_help
+    exit 1
+    ;;
+esac
+
+exit 0

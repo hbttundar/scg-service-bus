@@ -1,0 +1,197 @@
+name: scg-service-bus
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+# Cancel in-progress runs when a new workflow with the same ref is triggered
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Setup job to avoid redundant setup in other jobs
+  setup:
+    name: Setup
+    runs-on: ubuntu-latest
+    outputs:
+      go-version: ${{ steps.go-version.outputs.version }}
+    steps:
+      - name: Determine Go version
+        id: go-version
+        run: echo "version=1.24.5" >> $GITHUB_OUTPUT
+
+  # Build job compiles the code and caches the build artifacts
+  build:
+    name: Build
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ needs.setup.outputs.go-version }}
+          cache: true
+
+      # Cache build artifacts to speed up subsequent runs
+      - name: Cache build artifacts
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-build-${{ hashFiles('**/go.sum') }}-${{ hashFiles('**/*.go') }}
+          restore-keys: |
+            ${{ runner.os }}-go-build-${{ hashFiles('**/go.sum') }}-
+            ${{ runner.os }}-go-build-
+        continue-on-error: true
+
+      # Compile the code to ensure it builds successfully
+      - name: Build
+        run: go build -v ./...
+
+  # Test against multiple Go versions in parallel
+  test:
+    name: Test (Go ${{ matrix.go-version }})
+    needs: [setup, build]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version:
+          - ${{ needs.setup.outputs.go-version }}
+      fail-fast: false  # Continue with other versions if one fails
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: true
+
+      # Reuse build cache from the build job
+      - name: Cache build artifacts
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-build-${{ hashFiles('**/go.sum') }}-${{ hashFiles('**/*.go') }}
+          restore-keys: |
+            ${{ runner.os }}-go-build-${{ hashFiles('**/go.sum') }}-
+            ${{ runner.os }}-go-build-
+        continue-on-error: true
+
+      # Run tests with race detection and parallelism
+      - name: Test
+        run: go test -race -v -parallel 4 -coverprofile=coverage.txt -covermode=atomic ./...
+
+      # Upload coverage report
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.txt
+
+  # Lint job runs in parallel with test
+  lint:
+    name: Lint
+    needs: [setup, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ needs.setup.outputs.go-version }}
+          cache: true
+
+      # Reuse build cache from the build job
+      - name: Cache build artifacts
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-build-${{ hashFiles('**/go.sum') }}-${{ hashFiles('**/*.go') }}
+          restore-keys: |
+            ${{ runner.os }}-go-build-${{ hashFiles('**/go.sum') }}-
+            ${{ runner.os }}-go-build-
+        continue-on-error: true
+
+      # Cache golangci-lint cache to speed up subsequent runs
+      - name: Cache golangci-lint cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/golangci-lint
+          key: ${{ runner.os }}-golangci-lint-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-golangci-lint-
+        continue-on-error: true
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+          args: --timeout=5m --concurrency=4
+
+  # Security check job runs in parallel with test and lint
+  security:
+    name: Security Check
+    needs: [setup, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ needs.setup.outputs.go-version }}
+          cache: true
+
+      # Reuse build cache from the build job
+      - name: Cache build artifacts
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-build-${{ hashFiles('**/go.sum') }}-${{ hashFiles('**/*.go') }}
+          restore-keys: |
+            ${{ runner.os }}-go-build-${{ hashFiles('**/go.sum') }}-
+            ${{ runner.os }}-go-build-
+        continue-on-error: true
+
+      # Cache security tools to speed up subsequent runs
+      - name: Cache security tools
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/go/bin
+          key: ${{ runner.os }}-security-tools-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-security-tools-
+        continue-on-error: true
+
+      # Run security tools in parallel using background jobs
+      - name: Install and run security tools
+        run: |
+          # Install tools
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+          # Run govulncheck
+          govulncheck ./...
+
+          # Run gosec
+          gosec -quiet -exclude-dir=.git -exclude-dir=.github ./...
